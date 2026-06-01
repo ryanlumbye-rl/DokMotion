@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<title>DokMotion</title>
+<script src="CSInterface.js"></script>
+<script src="xlsx.min.js"></script>
+<style>
+:root {
+  /* TV2 midnight-blue palette */
+  --bg:   #05072C;
+  --s1:   #0A0D3A;
+  --s2:   #10164D;
+  --s3:   #151C58;
+  --s4:   #1b2264;
+
+  --line:  rgba(255,255,255,.10);
+  --line2: rgba(255,255,255,.16);
+
+  --acc:      #c0221a;
+  --acc2:     #FE451E;
+  --acc-dim:  rgba(254,69,30,0.13);
+  --acc-bord: rgba(254,69,30,0.35);
+
+  --grad-red:    linear-gradient(135deg, #FE451E 0%, #F23C18 100%);
+  --grad-red2:   linear-gradient(135deg, #FE451E 0%, #c0221a 100%);
+  --grad-panel:  linear-gradient(180deg, rgba(10,13,58,.94) 0%, rgba(5,7,44,.94) 100%);
+  --grad-badge:  linear-gradient(135deg, rgba(254,69,30,.14) 0%, rgba(255,255,255,.06) 100%);
+  --grad-btn-s:  linear-gradient(180deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,.06) 100%);
+
+  --text:  #FCFBFB;
+  --t2:    rgba(255,255,255,.72);
+  --t3:    rgba(255,255,255,.40);
+  --green: #28a06a;
+
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'TV 2 Regular','TV 2','Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+}
+
+html, body { background:var(--bg); margin:0; padding:0; width:100%; min-height:100vh; }
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+body { color:var(--text); font-family:var(--sans); font-size:11px; overflow-x:hidden; user-select:none; }
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--grad-panel); border-bottom:1px solid var(--line); position:relative; }
+.hdr::after { content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px; background:linear-gradient(90deg,rgba(254,69,30,.55) 0%,transparent 60%); }
+.wm  { font-family:var(--sans); font-size:14px; font-weight:700; letter-spacing:-0.01em; color:var(--text); }
+.hdr-right { display:flex; align-items:center; gap:8px; }
+.dot { width:5px; height:5px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse 2.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+.ver { font-family:var(--mono); font-size:8px; color:var(--t3); }
+
+/* ── Nav (top — sharp corners per design spec) ──────────────────────────────── */
+.nav { display:grid; grid-template-columns:repeat(6,1fr); background:rgba(255,255,255,.04); border-bottom:1px solid var(--line); width:100%; }
+.nb { background:none; border:none; border-right:1px solid var(--line); cursor:pointer; padding:9px 0 7px; display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; transition:background .12s; }
+.nb:last-child { border-right:none; }
+.nb:hover { background:rgba(255,255,255,.06); }
+.nb.on  { background:rgba(254,69,30,.10); }
+.nb.on::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--grad-red); }
+.nb-lbl { font-family:var(--mono); font-size:6.5px; letter-spacing:.04em; color:var(--t3); text-transform:uppercase; }
+.nb.on .nb-lbl { color:rgba(254,69,30,.95); }
+.nb svg path, .nb svg rect, .nb svg line, .nb svg polyline { stroke:rgba(255,255,255,.40); }
+.nb svg circle[fill="#555"] { fill:rgba(255,255,255,.40); stroke:none; }
+.nb.on svg path, .nb.on svg rect, .nb.on svg line, .nb.on svg polyline { stroke:rgba(254,69,30,.95); }
+.nb.on svg circle[fill="#555"] { fill:rgba(254,69,30,.95); }
+
+/* ── Panels ──────────────────────────────────────────────────────────────────── */
+.panel { display:none; padding-bottom:40px; width:100%; }
+.panel.on { display:block; }
+.sec { display:flex; align-items:center; gap:8px; padding:11px 12px 5px; font-family:var(--mono); font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--t3); }
+.sec::after { content:''; flex:1; height:1px; background:var(--line); }
+.field { padding:0 12px 6px; }
+.fl { font-family:var(--mono); font-size:8px; color:var(--t3); letter-spacing:.06em; text-transform:uppercase; margin-bottom:3px; }
+.r2 { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+
+/* ── Inputs ──────────────────────────────────────────────────────────────────── */
+input[type=text], input[type=number], select, textarea {
+  width:100%;
+  background:rgba(255,255,255,.06);
+  border:1px solid var(--line2);
+  border-radius:8px;
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:11px;
+  padding:7px 8px;
+  outline:none;
+  appearance:none;
+  transition:border-color .12s, background .12s;
+}
+input:focus, select:focus { border-color:rgba(254,69,30,.55); box-shadow:0 0 0 2px rgba(254,69,30,0.15); background:rgba(255,255,255,.08); }
+
+/* ── Badge ───────────────────────────────────────────────────────────────────── */
+.badge { margin:6px 12px 8px; background:var(--grad-badge); border:1px solid var(--line2); border-left:2px solid rgba(254,69,30,.75); padding:11px 13px; border-radius:10px; }
+.badge-nr   { font-family:var(--mono); font-size:26px; font-weight:700; color:rgba(254,69,30,.95); letter-spacing:-.03em; line-height:1; }
+.badge-name { font-size:10px; color:var(--text); margin-top:3px; font-family:var(--mono); }
+.badge-path { font-size:8px; color:var(--t3); margin-top:2px; font-family:var(--mono); word-break:break-all; }
+
+/* ── Tree / preview components ───────────────────────────────────────────────── */
+.tree { margin:0 12px 8px; background:rgba(255,255,255,.05); border:1px solid var(--line2); padding:9px 11px; font-family:var(--mono); font-size:9px; color:var(--t2); line-height:2.1; border-radius:10px; }
+.tree .hi  { color:rgba(254,69,30,.95); }
+.tree .hi2 { color:var(--text); }
+
+.preview { margin:0 12px 8px; background:rgba(255,255,255,.05); border:1px solid var(--line2); border-left:2px solid rgba(254,69,30,.75); padding:10px 12px; position:relative; border-radius:10px; }
+.prev-tag   { position:absolute; top:7px; right:9px; font-family:var(--mono); font-size:7px; letter-spacing:.1em; text-transform:uppercase; color:var(--t3); }
+.prev-name  { font-size:13px; font-weight:700; color:var(--text); line-height:1.2; }
+.prev-title { font-family:var(--mono); font-size:9px; color:var(--t2); margin-top:3px; }
+
+.layers { margin:0 12px 8px; border:1px solid var(--line2); overflow:hidden; border-radius:10px; }
+.layer  { display:flex; align-items:center; gap:9px; padding:6px 10px; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:9px; color:var(--t2); background:rgba(255,255,255,.04); }
+.layer:last-child { border-bottom:none; }
+.layer-bar    { width:2px; height:18px; flex-shrink:0; background:rgba(255,255,255,.18); }
+.layer-bar.a1 { background:var(--grad-red); }
+
+/* ── Buttons (action buttons are rounded per design spec) ────────────────────── */
+.btns { padding:6px 12px; display:grid; gap:6px; }
+.btns.c2 { grid-template-columns:1fr 1fr; }
+
+.btn {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  padding:10px;
+  border:none;
+  border-radius:12px;
+  font-family:var(--mono);
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  cursor:pointer;
+  transition:all .12s;
+  white-space:nowrap;
+}
+.btn-p   { background:var(--grad-red2); color:#fff; box-shadow:0 2px 0 rgba(0,0,0,.35),0 10px 22px rgba(254,69,30,.18),inset 0 1px 0 rgba(255,255,255,0.08); }
+.btn-p:hover  { filter:brightness(1.06); transform:translateY(-1px); }
+.btn-p:active { transform:translateY(1px); }
+.btn-s  { background:var(--grad-btn-s); color:var(--text); border:1px solid var(--line2); }
+.btn-s:hover  { border-color:rgba(254,69,30,.35); }
+.btn-g  { background:transparent; color:var(--t2); border:1px solid var(--line); }
+.btn-g:hover  { color:var(--text); border-color:var(--line2); }
+.btn-grn { background:linear-gradient(135deg,#28a06a 0%,#1a7a4e 100%); color:#fff; box-shadow:0 2px 0 rgba(0,0,0,.35),0 10px 22px rgba(40,160,106,.18),inset 0 1px 0 rgba(255,255,255,0.08); }
+.btn-grn:hover { filter:brightness(1.06); transform:translateY(-1px); }
+
+/* Update button — amber/warning tone to signal it touches existing comps */
+.btn-upd {
+  background:linear-gradient(135deg,#b8860b 0%,#8b6508 100%);
+  color:#fff;
+  box-shadow:0 2px 0 rgba(0,0,0,.35),0 10px 22px rgba(184,134,11,.15),inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.btn-upd:hover  { filter:brightness(1.08); transform:translateY(-1px); }
+.btn-upd:active { transform:translateY(1px); }
+
+/* ── Misc ────────────────────────────────────────────────────────────────────── */
+.info { margin:0 12px 8px; background:rgba(255,255,255,.05); border:1px solid var(--line); padding:7px 10px; font-family:var(--mono); font-size:9px; color:var(--t2); line-height:1.6; border-radius:10px; }
+.hint { margin:-2px 12px 6px; font-family:var(--mono); font-size:8px; color:var(--t3); line-height:1.5; padding:0 1px; }
+
+/* ── Blur checkboxes ─────────────────────────────────────────────────────────── */
+.chk-grid { margin:0 12px 8px; display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.chk-row  { display:flex; align-items:center; gap:7px; padding:6px 10px; background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:8px; cursor:pointer; transition:background .12s; }
+.chk-row:hover { background:rgba(255,255,255,.07); }
+.chk-row input[type=checkbox] { width:13px; height:13px; accent-color:var(--acc2); cursor:pointer; flex-shrink:0; }
+.chk-lbl  { font-family:var(--mono); font-size:9px; color:var(--t2); pointer-events:none; line-height:1.3; }
+
+.statusbar { position:fixed; bottom:0; left:0; right:0; background:var(--grad-panel); border-top:1px solid var(--line); padding:6px 12px; display:flex; align-items:center; justify-content:space-between; font-family:var(--mono); font-size:8px; color:var(--t3); letter-spacing:.05em; }
+.s-conn { display:flex; align-items:center; gap:5px; color:var(--green); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<div class="hdr">
+  <div class="logo"><span class="wm">DokMotion</span></div>
+  <div class="hdr-right"><span class="ver" id="ver-current">1.0</span><div class="dot"></div><a id="update-badge" href="#" style="display:none;margin-left:6px;font-size:9px;color:#FE451E;text-decoration:none;font-weight:700;letter-spacing:.04em;" title="Klik for at downloade ny version">↑ UPDATE</a></div>
+</div>
+
+<!-- ── Nav ─────────────────────────────────────────────────────────────────── -->
+<nav class="nav">
+  <button class="nb on" onclick="go('project',this)">
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#555" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5l1.5 2H16v8H2z"/></svg>
+    <span class="nb-lbl">Projekt</span>
+  </button>
+  <button class="nb" onclick="go('bundt',this)">
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#555" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="11" width="14" height="4"/><line x1="2" y1="8" x2="10" y2="8"/><line x1="2" y1="5.5" x2="7" y2="5.5"/></svg>
+    <span class="nb-lbl">Bundt</span>
+  </button>
+  <button class="nb" onclick="go('ident',this)">
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#555" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="3" width="14" height="4"/><line x1="2" y1="10" x2="10" y2="10"/><line x1="2" y1="12.5" x2="7" y2="12.5"/></svg>
+    <span class="nb-lbl">Ident</span>
+  </button>
+  <button class="nb" onclick="go('blur',this)">
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#555" stroke-width="1.4"><circle cx="9" cy="9" r="2"/><circle cx="9" cy="9" r="5" stroke-width="1" stroke-dasharray="2,1.5"/><circle cx="9" cy="9" r="7.5" stroke-width=".6" stroke-dasharray="1.5,2"/></svg>
+    <span class="nb-lbl">Blur</span>
+  </button>
+  <button class="nb" onclick="go('grade',this)">
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#555" stroke-width="1.4" stroke-linecap="round"><line x1="2" y1="5" x2="16" y2="5"/><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="13" x2="16" y2="13"/><circle cx="6" cy="5" r="1.8" fill="#555" stroke="none"/><circle cx="11" cy="9" r="1.8" fill="#555" stroke="none"/><circle cx="8" cy="13" r="1.8" fill="#555" stroke="none"/></svg>
+    <span class="nb-lbl">Grade</span>
+  </button>
+  <button class="nb" onclick="go('export',this)">
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#555" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,7 9,3 12,7"/><line x1="9" y1="3" x2="9" y2="12"/><rect x="3" y="13" width="12" height="2.5"/></svg>
+    <span class="nb-lbl">Export</span>
+  </button>
+</nav>
+
+<!-- ── PROJEKT ─────────────────────────────────────────────────────────────── -->
+<div id="panel-project" class="panel on">
+  <div class="sec">Projekt Info</div>
+  <div class="field">
+    <div class="r2">
+      <div><div class="fl">Projektnr.</div><input type="text"   id="pnr"      placeholder="216" value="216" oninput="upProj()"></div>
+      <div><div class="fl">Episoder</div>  <input type="number" id="pepisoder" placeholder="1"   min="1" max="20" value="1"   oninput="upProj()"></div>
+    </div>
+  </div>
+  <div class="field"><div class="fl">Grafik mapper per episode (max 20)</div><input type="number" id="pgrafik" placeholder="5" min="1" max="20" value="5" oninput="upProj()"></div>
+  <div class="badge">
+    <div class="badge-nr"   id="bnr">216</div>
+    <div class="badge-name" id="bname">1 episode - 5 grafik mapper</div>
+    <div class="badge-path" id="bpath">216 PGM1 / 216 01 GRAFIK 01-05</div>
+  </div>
+  <div class="sec">Preview</div>
+  <div class="tree" id="proj-tree">
+    01 COMPS<br>
+    &nbsp;&nbsp;L <span class="hi">216 PGM1</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;L <span class="hi2">216 01 GRAFIK 01</span><br>
+    02 BUNDTER<br>03 IDENTER<br>04 Assets<br>05 Udvikling
+  </div>
+  <div class="btns"><button class="btn btn-p" onclick="runProject()">Opret projekt i AE</button></div>
+</div>
+
+<!-- ── BUNDT ──────────────────────────────────────────────────────────────── -->
+<div id="panel-bundt" class="panel">
+  <div class="sec">Bundt</div>
+  <div class="field"><div class="fl">Navn</div> <input type="text" id="bnavn"  placeholder="John Andersen" oninput="upBundt()"></div>
+  <div class="field"><div class="fl">Titel</div><input type="text" id="btitel" placeholder="Titel"          oninput="upBundt()"></div>
+  <div class="field">
+    <div class="fl">Template comp</div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select id="tmpl" style="flex:1"></select>
+      <button class="btn btn-g" style="padding:8px 10px" onclick="refreshTemplates()">↻</button>
+    </div>
+  </div>
+  <div class="preview">
+    <div class="prev-tag">Preview</div>
+    <div class="prev-name"  id="prevN">John Andersen</div>
+    <div class="prev-title" id="prevT">Titel</div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-p" onclick="createBundtTemplate()">Opret Bundt (ny comp)</button>
+  </div>
+
+  <!-- Update section -->
+  <div class="sec">Opdater eksisterende</div>
+  <div class="hint">Opdaterer design i alle BUNDT-comps fra den valgte template.<br>Navn og titel bevares — alt andet overskrives.</div>
+  <div class="btns">
+    <button class="btn btn-upd" onclick="updateAllBundter()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      Opdater alle bundter
+    </button>
+  </div>
+
+  <div class="sec">Batch fra Excel</div>
+  <div class="info">Upload et Excel-ark. Data læses fra række 3. Der laves én comp pr. række. Compnavn: <b>BUNDT Navn 0001</b>.</div>
+  <div class="btns c2" style="padding-top:0">
+    <button class="btn btn-s" onclick="pickExcel()">Upload Excel</button>
+    <button class="btn btn-p" id="btn-batch" style="display:none" onclick="runBatchTemplate()">Lav comps</button>
+  </div>
+  <div id="excel-preview" style="display:none;margin:0 12px 8px">
+    <div class="layers" id="excel-rows"></div>
+    <div style="padding:5px 0 0;font-family:var(--mono);font-size:8px;color:var(--t3)" id="excel-count"></div>
+  </div>
+  <input type="file" id="excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadExcel(this)">
+</div>
+
+<!-- ── IDENT ──────────────────────────────────────────────────────────────── -->
+<div id="panel-ident" class="panel">
+  <div class="sec">Ident</div>
+  <div class="field"><div class="fl">Tekst</div><input type="text" id="itxt" placeholder="Skjult kamera" oninput="upIdent()"></div>
+  <div class="preview"><div class="prev-tag">Upper</div><div class="prev-name" id="prevI">Skjult kamera</div></div>
+  <div class="btns"><button class="btn btn-p" onclick="run('createIdent',{tekst:val('itxt','Skjult kamera')})">Opret Ident i AE</button></div>
+</div>
+
+<!-- ── BLUR ───────────────────────────────────────────────────────────────── -->
+<div id="panel-blur" class="panel">
+  <div class="sec">DokMotion Blur</div>
+  <div class="info">Camera Lens Blur med hex-iris og diagonal fokuszone. Tilføj footage for at se effekterne.</div>
+  <div class="field">
+    <div class="fl">Iris Radius</div>
+    <input type="number" id="bradius" value="25" min="1" max="200" oninput="updateBlurLabel(this.value)">
+  </div>
+  <div class="sec">Cinematic Effekter</div>
+  <div class="chk-grid">
+    <label class="chk-row">
+      <input type="checkbox" id="blur-ca" checked>
+      <span class="chk-lbl">Chromatic<br>Aberration</span>
+    </label>
+    <label class="chk-row">
+      <input type="checkbox" id="blur-hal" checked>
+      <span class="chk-lbl">Halation</span>
+    </label>
+    <label class="chk-row">
+      <input type="checkbox" id="blur-vig" checked>
+      <span class="chk-lbl">Vignette</span>
+    </label>
+    <label class="chk-row">
+      <input type="checkbox" id="blur-grain" checked>
+      <span class="chk-lbl">Film Grain</span>
+    </label>
+  </div>
+  <div class="btns c2">
+    <button class="btn btn-s" onclick="applyBlurPanel('preview')">Preview</button>
+    <button class="btn btn-p" onclick="applyBlurPanel('apply')">Anvend Blur</button>
+  </div>
+</div>
+
+<!-- ── GRADE ──────────────────────────────────────────────────────────────── -->
+<div id="panel-grade" class="panel">
+  <div class="sec">Grade Stack</div>
+  <div class="btns c2">
+    <button class="btn btn-g" onclick="run('saveGrade')">Gem preset</button>
+    <button class="btn btn-p" onclick="run('applyGrade')">Anvend Grade</button>
+  </div>
+</div>
+
+<!-- ── EXPORT ─────────────────────────────────────────────────────────────── -->
+<div id="panel-export" class="panel">
+  <div class="sec">Output mappe</div>
+  <div class="btns c2" style="padding-top:0">
+    <button class="btn btn-g" onclick="run('browseOutputPath')">Vælg mappe</button>
+    <button class="btn btn-s" onclick="run('useProjectPath')">Projektmappe</button>
+  </div>
+  <div class="btns">
+    <button class="btn btn-grn" onclick="run('addToRenderQueue')">Tilføj til Render Queue</button>
+    <button class="btn btn-p"   onclick="run('renderNow')">Render Nu</button>
+  </div>
+</div>
+
+<!-- ── Status bar ─────────────────────────────────────────────────────────── -->
+<div class="statusbar">
+  <span class="s-conn"><span class="dot"></span>AE forbundet</span>
+  <span id="smsg">Klar</span>
+  <span id="bval">--</span>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+var cs = null;
+var excelData = [];
+var _stTimer = null;
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+/** Get and trim the value of an input by id, falling back to a default. */
+function val(id, fallback) {
+  var el = document.getElementById(id);
+  var v = el ? el.value.trim() : '';
+  return v || (fallback || '');
+}
+
+/** Show a temporary status message, resetting to "Klar" after 3 s. */
+function st(msg) {
+  var el = document.getElementById('smsg');
+  if (el) el.textContent = msg;
+  clearTimeout(_stTimer);
+  _stTimer = setTimeout(function () {
+    var e = document.getElementById('smsg');
+    if (e) e.textContent = 'Klar';
+  }, 3000);
+}
+
+/** HTML-escape a string for safe insertion via innerHTML. */
+function esc(s) {
+  return (s || '').toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function pad2(n) { n = parseInt(n, 10) || 0; return (n < 10 ? '0' : '') + n; }
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+
+function go(id, btn) {
+  document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('on'); });
+  document.querySelectorAll('.nb').forEach(function (b) { b.classList.remove('on'); });
+  document.getElementById('panel-' + id).classList.add('on');
+  btn.classList.add('on');
+}
+
+// ─── Panel live-preview updates ───────────────────────────────────────────────
+
+function upBundt() {
+  document.getElementById('prevN').textContent = val('bnavn', 'John Andersen');
+  document.getElementById('prevT').textContent = val('btitel', 'Titel');
+}
+
+function upIdent() {
+  document.getElementById('prevI').textContent = val('itxt', 'Skjult kamera');
+}
+
+function upProj() {
+  var nr       = val('pnr', '216');
+  var episoder = Math.min(20, Math.max(1, parseInt(val('pepisoder', '1'), 10) || 1));
+  var grafik   = Math.min(20, Math.max(1, parseInt(val('pgrafik',   '5'), 10) || 5));
+
+  document.getElementById('bnr').textContent   = nr;
+  document.getElementById('bname').textContent = episoder + ' episode' + (episoder > 1 ? 'r' : '') + ' - ' + grafik + ' grafik mapper';
+  document.getElementById('bpath').textContent = nr + ' PGM1-' + episoder + ' / ' + nr + ' 01 GRAFIK 01-' + pad2(grafik);
+
+  var html = '01 COMPS<br>';
+  var eMax = Math.min(episoder, 3);
+  var gMax = Math.min(grafik,   3);
+  for (var e = 1; e <= eMax; e++) {
+    html += '&nbsp;&nbsp;L <span class="hi">' + esc(nr + ' PGM' + e) + '</span><br>';
+    for (var g = 1; g <= gMax; g++) {
+      html += '&nbsp;&nbsp;&nbsp;&nbsp;L <span class="hi2">' + esc(nr + ' ' + pad2(e) + ' GRAFIK ' + pad2(g)) + '</span><br>';
+    }
+  }
+  html += '02 BUNDTER<br>03 IDENTER<br>04 Assets<br>05 Udvikling';
+  document.getElementById('proj-tree').innerHTML = html;
+}
+
+function updateBlurLabel(v) {
+  var el = document.getElementById('bval');
+  if (el) el.textContent = 'r: ' + v;
+}
+
+function getBlurArgs() {
+  return {
+    radius:   parseInt(val('bradius', '25'), 10) || 25,
+    ca:       document.getElementById('blur-ca').checked,
+    halation: document.getElementById('blur-hal').checked,
+    vignette: document.getElementById('blur-vig').checked,
+    grain:    document.getElementById('blur-grain').checked
+  };
+}
+
+function applyBlurPanel(mode) {
+  var fn = mode === 'preview' ? 'applyBlurPreview' : 'applyBlur';
+  run(fn, getBlurArgs());
+}
+
+// ─── AE bridge ────────────────────────────────────────────────────────────────
+
+/**
+ * Call a DokMotion ExtendScript function.
+ * args is a plain JS object; it is JSON-serialised for the evalScript call.
+ */
+function run(fn, args) {
+  if (!cs) { st('DEV'); return; }
+  var script = 'DokMotion.' + fn + '(' + (args ? JSON.stringify(args) : '{}') + ')';
+  cs.evalScript(script, function (r) {
+    st(r === 'EvalScript error.' ? ('Fejl i ' + fn) : (r || 'OK'));
+  });
+}
+
+function runProject() {
+  run('createFullProject', {
+    nr:       val('pnr', '216'),
+    episoder: parseInt(val('pepisoder', '1'), 10) || 1,
+    grafik:   parseInt(val('pgrafik',   '5'), 10) || 5
+  });
+}
+
+// ─── Comp template picker ─────────────────────────────────────────────────────
+
+function refreshTemplates() {
+  if (!cs) { st('DEV'); return; }
+  cs.evalScript('DokMotion.listComps()', function (r) {
+    try {
+      var arr = JSON.parse(r || '[]');
+      var sel = document.getElementById('tmpl');
+      sel.innerHTML = '';
+      arr.forEach(function (name) {
+        var opt = document.createElement('option');
+        opt.value = opt.textContent = name;
+        sel.appendChild(opt);
+      });
+      st(arr.length ? 'Comps klar' : 'Ingen comps');
+    } catch (e) { st('Fejl: kunne ikke læse comps'); }
+  });
+}
+
+function createBundtTemplate() {
+  var tmpl = document.getElementById('tmpl').value.trim();
+  if (!tmpl) { st('Vælg template'); return; }
+  run('createBundtFromTemplate', { template: tmpl, navn: val('bnavn', ''), titel: val('btitel', '') });
+}
+
+/**
+ * Re-apply the selected template design to all existing BUNDT comps.
+ * Each comp's navn and titel text are preserved; everything else is replaced.
+ */
+function updateAllBundter() {
+  var tmpl = document.getElementById('tmpl').value.trim();
+  if (!tmpl) { st('Vælg template'); return; }
+  if (!cs)   { st('DEV'); return; }
+  st('Opdaterer...');
+  cs.evalScript('DokMotion.updateAllBundter(' + JSON.stringify({ template: tmpl }) + ')', function (r) {
+    st(r === 'EvalScript error.' ? 'Fejl i update' : (r || 'Opdateret'));
+  });
+}
+
+// ─── Excel batch ─────────────────────────────────────────────────────────────
+
+function pickExcel() { document.getElementById('excel-input').click(); }
+
+function loadExcel(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { st('Mangler xlsx.min.js'); return; }
+  st('Læser fil...');
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      parseWorkbook(XLSX.read(new Uint8Array(e.target.result), { type: 'array' }), file.name);
+    } catch (err) { st('Fejl: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseWorkbook(wb, srcFileName) {
+  // Prefer a sheet whose name contains a known keyword; fall back to first sheet
+  var prio = ['BUNDTER OG IDENTER', 'BUNDTER', 'BUNDT'];
+  var sheet = null, sheetName = '';
+  for (var p = 0; p < prio.length && !sheet; p++) {
+    wb.SheetNames.forEach(function (sn) {
+      if (!sheet && sn.toUpperCase().indexOf(prio[p]) !== -1) {
+        sheet = wb.Sheets[sn];
+        sheetName = sn;
+      }
+    });
+  }
+  if (!sheet) { sheet = wb.Sheets[wb.SheetNames[0]]; sheetName = wb.SheetNames[0]; }
+
+  var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  excelData = [];
+
+  // Data starts at row index 2 (row 3 in Excel)
+  for (var i = 2; i < rows.length; i++) {
+    var navn  = (rows[i][0] || '').toString().trim();
+    var titel = (rows[i][1] || '').toString().trim();
+    if (!navn) continue;
+    var navnUpper = navn.toUpperCase();
+    if (navnUpper.indexOf('VÆLG') !== -1 || navnUpper.indexOf('VAELG') !== -1) continue;
+    if (titel.toUpperCase().indexOf('STATUS') !== -1) titel = '';
+    excelData.push({ navn: navn, titel: titel });
+  }
+
+  var html = excelData.slice(0, 5).map(function (row) {
+    return '<div class="layer"><div class="layer-bar a1"></div>' +
+           '<span style="flex:1;font-size:9px">' + esc(row.navn) + '</span>' +
+           '<span style="color:var(--t3);font-size:8px">' + esc(row.titel || '--') + '</span></div>';
+  }).join('');
+  if (excelData.length > 5) {
+    html += '<div class="layer"><div class="layer-bar"></div>' +
+            '<span style="color:var(--t3);font-size:8px">+ ' + (excelData.length - 5) + ' flere...</span></div>';
+  }
+
+  document.getElementById('excel-rows').innerHTML = html;
+  document.getElementById('excel-count').textContent = srcFileName + ' — ' + sheetName + ' — ' + excelData.length + ' bundter';
+  document.getElementById('excel-preview').style.display = 'block';
+  document.getElementById('btn-batch').style.display = excelData.length ? 'flex' : 'none';
+  st(excelData.length + ' bundter fundet');
+}
+
+function runBatchTemplate() {
+  var tmpl = document.getElementById('tmpl').value.trim();
+  if (!tmpl)             { st('Vælg template'); return; }
+  if (!excelData.length) { st('Ingen data');    return; }
+  if (!cs)               { st('DEV');           return; }
+
+  // The JSX side receives jsonString as a plain string argument,
+  // so we JSON.stringify twice: once to build the data string,
+  // once to wrap it as a JS string literal in the evalScript call.
+  var dataArg = JSON.stringify(JSON.stringify(excelData));
+  var tmplArg = JSON.stringify(tmpl);
+  cs.evalScript('DokMotion.batchBundtFromTemplate(' + dataArg + ',' + tmplArg + ')', function (r) {
+    st(r || 'Batch færdig');
+  });
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+// ─── Update check ─────────────────────────────────────────────────────────────
+// Reads the latest GitHub release tag and shows a badge if newer than current.
+var CURRENT_VERSION = '1.0.0';
+var GITHUB_REPO     = 'ryanlumbye-rl/DokMotion';
+
+function checkForUpdate() {
+  // Only check once per 24 hours (cached in localStorage)
+  try {
+    var cached    = localStorage.getItem('dokmotion_update_check');
+    var cacheData = cached ? JSON.parse(cached) : null;
+    var now       = Date.now();
+    if (cacheData && (now - cacheData.ts) < 86400000) {
+      if (cacheData.latest && cacheData.latest !== CURRENT_VERSION) {
+        showUpdateBadge(cacheData.latest, cacheData.url);
+      }
+      return;
+    }
+  } catch(_e) {}
+
+  // Fetch latest release from GitHub API
+  var url = 'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest';
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = 5000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+      try {
+        if (xhr.status === 200) {
+          var data    = JSON.parse(xhr.responseText);
+          var latest  = (data.tag_name || '').replace(/^v/, '');
+          var dlUrl   = data.html_url || ('https://github.com/' + GITHUB_REPO + '/releases/latest');
+          localStorage.setItem('dokmotion_update_check', JSON.stringify({ ts: Date.now(), latest: latest, url: dlUrl }));
+          if (latest && latest !== CURRENT_VERSION && compareVersions(latest, CURRENT_VERSION) > 0) {
+            showUpdateBadge(latest, dlUrl);
+          }
+        }
+      } catch(_e) {}
+    };
+    xhr.send();
+  } catch(_e) {}
+}
+
+function compareVersions(a, b) {
+  var pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (var i = 0; i < 3; i++) {
+    var diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function showUpdateBadge(version, url) {
+  var badge = document.getElementById('update-badge');
+  if (!badge) return;
+  badge.textContent = '↑ v' + version;
+  badge.href        = url;
+  badge.style.display = 'inline';
+  badge.onclick = function(e) {
+    e.preventDefault();
+    if (typeof cs !== 'undefined' && cs) {
+      cs.openURLInDefaultBrowser(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof CSInterface !== 'undefined') cs = new CSInterface();
+
+  // Force-reload the JSX from disk every time the panel opens so that
+  // code changes are picked up without restarting After Effects.
+  if (cs) {
+    var jsxPath = cs.getSystemPath(SystemPath.EXTENSION) + '/jsx/DokMotion.jsx';
+    cs.evalScript('$.evalFile("' + jsxPath + '")', function () {
+      upProj();
+      upBundt();
+      upIdent();
+      refreshTemplates();
+    });
+  } else {
+    upProj();
+    upBundt();
+    upIdent();
+    refreshTemplates();
+  }
+
+  // Check for updates (non-blocking, cached 24h)
+  setTimeout(checkForUpdate, 3000);
+});
+</script>
+</body>
+</html>
