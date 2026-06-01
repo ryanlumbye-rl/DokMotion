@@ -637,6 +637,59 @@ var DokMotion = (function () {
     }
   }
 
+  // ─── Self-updater ───────────────────────────────────────────────────────────
+  // Downloads a zip from GitHub releases and installs it into the CEP folder.
+  // Called from index.html when the user clicks "Opdater nu".
+  // Works without Gatekeeper approval — no .pkg needed for updates.
+  //
+  // NOTE: Requires the GitHub repo to be PUBLIC so the download URL works
+  //       without authentication. Make the repo public under GitHub Settings.
+
+  function downloadAndInstall(args) {
+    args = _obj(args);
+    var zipUrl = args.url || '';
+    if (!zipUrl) return 'Fejl: Ingen download URL';
+
+    // Resolve install dir: ~/Library/Application Support/Adobe/CEP/extensions/<id>
+    var homeDir    = system.callSystem('/bin/bash -c "echo $HOME"').replace(/[\r\n]/g, '');
+    var installDir = homeDir + '/Library/Application Support/Adobe/CEP/extensions/dk.tv2dok.dokmotion';
+    var ts         = '' + (new Date()).getTime();
+    var tmpZip     = '/tmp/dokmotion_update_' + ts + '.zip';
+    var tmpDir     = '/tmp/dokmotion_extract_' + ts;
+
+    // 1. Download zip
+    var dlOut = system.callSystem(
+      '/bin/bash -c "curl -L -f --silent --show-error -o \'' + tmpZip + '\' \'' + zipUrl + '\' 2>&1; echo __EXIT__$?"'
+    );
+    if (dlOut.indexOf('__EXIT__0') === -1) {
+      return 'Fejl ved download: ' + dlOut.replace('__EXIT__1','').substring(0, 120);
+    }
+
+    // 2. Extract zip to temp dir
+    var uzOut = system.callSystem(
+      '/bin/bash -c "mkdir -p \'' + tmpDir + '\' && unzip -q \'' + tmpZip + '\' -d \'' + tmpDir + '\' 2>&1; echo __EXIT__$?"'
+    );
+    if (uzOut.indexOf('__EXIT__0') === -1) {
+      system.callSystem('/bin/bash -c "rm -f \'' + tmpZip + '\'"');
+      return 'Fejl ved udpakning: ' + uzOut.replace('__EXIT__1','').substring(0, 120);
+    }
+
+    // 3. Backup existing install (keep one .bak)
+    system.callSystem(
+      '/bin/bash -c "rm -rf \'' + installDir + '.bak\' && cp -R \'' + installDir + '\' \'' + installDir + '.bak\' 2>/dev/null; true"'
+    );
+
+    // 4. Copy new files over (trailing /. copies contents, not the dir itself)
+    system.callSystem(
+      '/bin/bash -c "cp -Rf \'' + tmpDir + '/.\'  \'' + installDir + '/\' 2>&1"'
+    );
+
+    // 5. Cleanup temp files
+    system.callSystem('/bin/bash -c "rm -f \'' + tmpZip + '\' && rm -rf \'' + tmpDir + '\'"');
+
+    return 'ok';
+  }
+
   // ─── Public API ─────────────────────────────────────────────────────────────
 
   return {
@@ -653,7 +706,8 @@ var DokMotion = (function () {
     browseOutputPath:        browseOutputPath,
     useProjectPath:          useProjectPath,
     addToRenderQueue:        addToRenderQueue,
-    renderNow:               renderNow
+    renderNow:               renderNow,
+    downloadAndInstall:      downloadAndInstall
   };
 
 })();

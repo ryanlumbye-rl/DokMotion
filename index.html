@@ -168,7 +168,7 @@ input:focus, select:focus { border-color:rgba(254,69,30,.55); box-shadow:0 0 0 2
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <div class="hdr">
   <div class="logo"><span class="wm">DokMotion</span></div>
-  <div class="hdr-right"><span class="ver" id="ver-current">1.0</span><div class="dot"></div><a id="update-badge" href="#" style="display:none;margin-left:6px;font-size:9px;color:#FE451E;text-decoration:none;font-weight:700;letter-spacing:.04em;" title="Klik for at downloade ny version">↑ UPDATE</a></div>
+  <div class="hdr-right"><span class="ver" id="ver-current">1.0.1</span><div class="dot"></div><a id="update-badge" href="#" style="display:none;margin-left:6px;font-size:9px;color:#FE451E;text-decoration:none;font-weight:700;letter-spacing:.04em;" title="Klik for at downloade ny version">↑ UPDATE</a></div>
 </div>
 
 <!-- ── Nav ─────────────────────────────────────────────────────────────────── -->
@@ -582,7 +582,7 @@ function runBatchTemplate() {
 
 // ─── Update check ─────────────────────────────────────────────────────────────
 // Reads the latest GitHub release tag and shows a badge if newer than current.
-var CURRENT_VERSION = '1.0.0';
+var CURRENT_VERSION = '1.0.1';
 var GITHUB_REPO     = 'ryanlumbye-rl/DokMotion';
 
 function checkForUpdate() {
@@ -592,8 +592,8 @@ function checkForUpdate() {
     var cacheData = cached ? JSON.parse(cached) : null;
     var now       = Date.now();
     if (cacheData && (now - cacheData.ts) < 86400000) {
-      if (cacheData.latest && cacheData.latest !== CURRENT_VERSION) {
-        showUpdateBadge(cacheData.latest, cacheData.url);
+      if (cacheData.latest && compareVersions(cacheData.latest, CURRENT_VERSION) > 0) {
+        showUpdateBadge(cacheData.latest, cacheData.zipUrl, cacheData.pageUrl);
       }
       return;
     }
@@ -611,10 +611,22 @@ function checkForUpdate() {
         if (xhr.status === 200) {
           var data    = JSON.parse(xhr.responseText);
           var latest  = (data.tag_name || '').replace(/^v/, '');
-          var dlUrl   = data.html_url || ('https://github.com/' + GITHUB_REPO + '/releases/latest');
-          localStorage.setItem('dokmotion_update_check', JSON.stringify({ ts: Date.now(), latest: latest, url: dlUrl }));
-          if (latest && latest !== CURRENT_VERSION && compareVersions(latest, CURRENT_VERSION) > 0) {
-            showUpdateBadge(latest, dlUrl);
+          var pageUrl = data.html_url || ('https://github.com/' + GITHUB_REPO + '/releases/latest');
+          // Find the .zip asset (the plugin update bundle, not the .pkg)
+          var zipUrl  = '';
+          var assets  = data.assets || [];
+          for (var i = 0; i < assets.length; i++) {
+            var a = assets[i];
+            if (a.name && a.name.match(/\.zip$/i) && a.browser_download_url) {
+              zipUrl = a.browser_download_url;
+              break;
+            }
+          }
+          localStorage.setItem('dokmotion_update_check', JSON.stringify({
+            ts: Date.now(), latest: latest, zipUrl: zipUrl, pageUrl: pageUrl
+          }));
+          if (latest && compareVersions(latest, CURRENT_VERSION) > 0) {
+            showUpdateBadge(latest, zipUrl, pageUrl);
           }
         }
       } catch(_e) {}
@@ -632,20 +644,57 @@ function compareVersions(a, b) {
   return 0;
 }
 
-function showUpdateBadge(version, url) {
+function showUpdateBadge(version, zipUrl, pageUrl) {
   var badge = document.getElementById('update-badge');
   if (!badge) return;
-  badge.textContent = '↑ v' + version;
-  badge.href        = url;
+  badge.textContent   = '↑ v' + version;
   badge.style.display = 'inline';
+  badge.title         = zipUrl ? 'Klik for at installere v' + version + ' direkte' : 'Klik for at åbne download-siden';
   badge.onclick = function(e) {
     e.preventDefault();
-    if (typeof cs !== 'undefined' && cs) {
-      cs.openURLInDefaultBrowser(url);
-    } else {
-      window.open(url, '_blank');
+    if (zipUrl && typeof cs !== 'undefined' && cs) {
+      runInPanelUpdate(version, zipUrl, pageUrl);
+    } else if (pageUrl) {
+      // Fallback: open release page in browser
+      if (typeof cs !== 'undefined' && cs) { cs.openURLInDefaultBrowser(pageUrl); }
+      else { window.open(pageUrl, '_blank'); }
     }
   };
+}
+
+// ── In-panel updater ──────────────────────────────────────────────────────────
+// Downloads the zip release asset and installs it via ExtendScript system.callSystem().
+// No Gatekeeper approval needed — just file copying.
+
+function runInPanelUpdate(version, zipUrl, pageUrl) {
+  var badge = document.getElementById('update-badge');
+  if (!badge) return;
+
+  // Show loading state
+  badge.textContent = '⟳ Henter…';
+  badge.style.color = '#aaa';
+  badge.onclick     = null; // prevent double-click
+
+  var args = JSON.stringify({ url: zipUrl });
+  cs.evalScript('DokMotion.downloadAndInstall(' + args + ')', function(result) {
+    if (result === 'ok') {
+      badge.textContent   = '✓ Genstart AE';
+      badge.style.color   = '#4CAF50';
+      badge.title         = 'Opdatering installeret — genstart After Effects for at aktivere';
+      badge.onclick       = null;
+      // Clear cache so next check re-fetches fresh
+      try { localStorage.removeItem('dokmotion_update_check'); } catch(_e) {}
+    } else {
+      // On error, fall back to opening the release page
+      badge.textContent   = '↑ v' + version + ' (fejl)';
+      badge.style.color   = '#FE451E';
+      badge.title         = 'Automatisk opdatering fejlede — klik for at hente manuelt\n' + (result || '');
+      badge.onclick       = function(e) {
+        e.preventDefault();
+        if (pageUrl) cs.openURLInDefaultBrowser(pageUrl);
+      };
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', function () {

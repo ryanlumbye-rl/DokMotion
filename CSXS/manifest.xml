@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest Version="7.0"
   ExtensionBundleId="dk.tv2dok.dokmotion"
-  ExtensionBundleVersion="1.0.0"
+  ExtensionBundleVersion="1.0.1"
   ExtensionBundleName="DokMotion">
   <ExtensionList>
-    <Extension Id="dk.tv2dok.dokmotion.panel" Version="1.0.0"/>
+    <Extension Id="dk.tv2dok.dokmotion.panel" Version="1.0.1"/>
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
-      <Host Name="AEFT" Version="[16.0,99.9]"/>
+      <Host Name="AEFT" Version="1.0.1"/>
     </HostList>
     <LocaleList>
       <Locale Code="All"/>
     </LocaleList>
     <RequiredRuntimeList>
-      <RequiredRuntime Name="CSXS" Version="[9.0,15.0]"/>
+      <RequiredRuntime Name="CSXS" Version="1.0.1"/>
     </RequiredRuntimeList>
   </ExecutionEnvironment>
   <DispatchInfoList>
