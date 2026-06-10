@@ -168,7 +168,7 @@ input:focus, select:focus { border-color:rgba(254,69,30,.55); box-shadow:0 0 0 2
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <div class="hdr">
   <div class="logo"><span class="wm">DokMotion</span></div>
-  <div class="hdr-right"><span class="ver" id="ver-current">1.0.2</span><div class="dot"></div><a id="update-badge" href="#" style="display:none;margin-left:6px;font-size:9px;color:#FE451E;text-decoration:none;font-weight:700;letter-spacing:.04em;" title="Klik for at downloade ny version">↑ UPDATE</a></div>
+  <div class="hdr-right"><span class="ver" id="ver-current" title="Dobbeltklik for at tjekke for opdatering" style="cursor:default" ondblclick="forceCheckUpdate()">1.0.2</span><div class="dot"></div><a id="update-badge" href="#" style="display:none;margin-left:6px;font-size:9px;color:#FE451E;text-decoration:none;font-weight:700;letter-spacing:.04em;" title="Klik for at installere opdatering">↑ UPDATE</a></div>
 </div>
 
 <!-- ── Nav ─────────────────────────────────────────────────────────────────── -->
@@ -582,7 +582,7 @@ function runBatchTemplate() {
 
 // ─── Update check ─────────────────────────────────────────────────────────────
 // Reads the latest GitHub release tag and shows a badge if newer than current.
-var CURRENT_VERSION = '1.0.2';
+var CURRENT_VERSION = '1.0.3';
 var GITHUB_REPO     = 'ryanlumbye-rl/DokMotion';
 
 function checkForUpdate() {
@@ -633,6 +633,13 @@ function checkForUpdate() {
     };
     xhr.send();
   } catch(_e) {}
+}
+
+function forceCheckUpdate() {
+  try { localStorage.removeItem('dokmotion_update_check'); } catch(_e) {}
+  var ver = document.getElementById('ver-current');
+  if (ver) { ver.style.color = 'var(--t2)'; setTimeout(function(){ ver.style.color = ''; }, 800); }
+  checkForUpdate();
 }
 
 function compareVersions(a, b) {
